@@ -9,10 +9,14 @@ FormatDemuxFlv::FormatDemuxFlv()
     p_read_ptr_      = nullptr;
     p_streams_       = nullptr;
     asc_             = nullptr;
+    sps_             = nullptr;
+    pps_             = nullptr;
     streams_num_     = 0;
     stream_id_video_ = 0;
     stream_id_audio_ = 0;
     flv_file_length_ = 0;
+    sps_len_         = 0;
+    pps_len_         = 0;
     b_include_video_stream_ = false;
     b_include_audio_stream_ = false;
 }
@@ -27,7 +31,7 @@ FormatDemuxFlv::~FormatDemuxFlv()
     }
     if(p_streams_)
     {
-        delete p_streams_;
+        delete[] p_streams_;
         p_streams_ = nullptr;
     }
     if(asc_)
@@ -36,18 +40,16 @@ FormatDemuxFlv::~FormatDemuxFlv()
         asc_ = nullptr;
     }
 
-    for(auto itr = sps_vec_.begin(); itr != sps_vec_.end();)
+    if(sps_)
     {
-        delete[] *itr;
-        *itr = nullptr;
-        itr = sps_vec_.erase(itr);
+        delete sps_;
+        sps_ = nullptr;
     }
 
-    for(auto itr = pps_vec_.begin(); itr != pps_vec_.end();)
+    if(pps_)
     {
-        delete[] *itr;
-        *itr = nullptr;
-        itr = pps_vec_.erase(itr);
+        delete pps_;
+        pps_ = nullptr;
     }
 }
 
@@ -368,6 +370,12 @@ int FormatDemuxFlv::ParseAudioHeadAndData(MediaStreamPacket** p_pkts, uint32_t* 
 
 int FormatDemuxFlv::ParsevideoHeadAndData(MediaStreamPacket** p_pkts, uint32_t* p_tag_remaining_length)
 {
+    bool b_key_frame = false;
+    if(((*p_read_ptr_) & 0xf0) == 0x10)
+    {
+        b_key_frame = true;
+    }
+
     (*p_tag_remaining_length)--;
     p_read_ptr_++;
 
@@ -381,18 +389,26 @@ int FormatDemuxFlv::ParsevideoHeadAndData(MediaStreamPacket** p_pkts, uint32_t* 
         for(uint8_t i = 0; i < spsnum; i++)
         {
             uint16_t spssize = ((uint16_t)(p_read_ptr_[offset]) << 8) | (uint16_t)p_read_ptr_[offset + 1];
-            uint8_t* sps_mem = new uint8_t[spssize];
-            memcpy(sps_mem, p_read_ptr_ + offset + 2, spssize);
-            sps_vec_.push_back(sps_mem);
+            if(i == spsnum - 1)
+            {
+                uint8_t* sps_mem = new uint8_t[spssize];
+                sps_len_ = spssize;
+                memcpy(sps_mem, p_read_ptr_ + offset + 2, spssize);
+                sps_ = sps_mem;
+            }
             offset += (2 + spssize);
         }
         uint8_t ppsnum = p_read_ptr_[offset++];
         for(uint8_t i = 0; i < ppsnum; i++)
         {
             uint16_t ppssize = ((uint16_t)(p_read_ptr_[offset]) << 8) | (uint16_t)p_read_ptr_[offset + 1];
-            uint8_t* pps_mem = new uint8_t[ppssize];
-            memcpy(pps_mem, p_read_ptr_ + offset + 2, ppssize);
-            pps_vec_.push_back(pps_mem);
+            if(i == ppsnum - 1)
+            {
+                uint8_t* pps_mem = new uint8_t[ppssize];
+                pps_len_ = ppssize;
+                memcpy(pps_mem, p_read_ptr_ + offset + 2, ppssize);
+                pps_ = pps_mem;
+            }
             offset += (2 + ppssize);
         }
         delete *p_pkts;
@@ -409,39 +425,81 @@ int FormatDemuxFlv::ParsevideoHeadAndData(MediaStreamPacket** p_pkts, uint32_t* 
         p_read_ptr_ += 4;
         (*p_tag_remaining_length) -= 4;
 
-        uint32_t offset = 0;
         (*p_pkts)->data_length = 0;
-        std::array<uint8_t,4> StartCodeArray = {0x00,0x00,0x00,0x01};
-        std::vector<uint8_t> nalus;
-        while(offset < *p_tag_remaining_length)
+        uint8_t start_code[4] = {0x00,0x00,0x00,0x01};
+        std::map<uint32_t, uint8_t*> mem_map;
+        while(*p_tag_remaining_length > 0)
         {
+            uint8_t* nalu_mem = nullptr;
+            uint32_t nalu_mem_size = 0;
             uint32_t naluSize = 0;
-            naluSize |= static_cast<uint32_t>(p_read_ptr_[offset++]) << 24;
-            naluSize |= static_cast<uint32_t>(p_read_ptr_[offset++]) << 16;
-            naluSize |= static_cast<uint32_t>(p_read_ptr_[offset++]) << 8;
-            naluSize |= static_cast<uint32_t>(p_read_ptr_[offset++]);
-            if((p_read_ptr_[offset] & 0x1f) == 5)
+            naluSize |= static_cast<uint32_t>(p_read_ptr_[0]) << 24;
+            naluSize |= static_cast<uint32_t>(p_read_ptr_[1]) << 16;
+            naluSize |= static_cast<uint32_t>(p_read_ptr_[2]) << 8;
+            naluSize |= static_cast<uint32_t>(p_read_ptr_[3]);
+            p_read_ptr_ += 4;
+            (*p_tag_remaining_length) -= 4;
+            uint32_t offset_pkt = 0;
+            if((p_read_ptr_[0] & 0x1f) == 0x05)
             {
-                (*p_pkts)->flags = (*p_pkts)->flags | 0x0001;
-                for(auto sps : sps_vec_)
-                {
-                    nalus.insert(nalus.end(),StartCodeArray.begin(),StartCodeArray.end());
-                    nalus.insert(nalus.end(), sps, sps + sizeof(sps));
-                }
+                nalu_mem_size += naluSize + 4 * 3 + sps_len_ + pps_len_;
 
-                for(auto pps : pps_vec_)
-                {
-                    nalus.insert(nalus.end(),StartCodeArray.begin(),StartCodeArray.end());
-                    nalus.insert(nalus.end(), pps, pps + sizeof(pps));
-                }
+                printf("%u\n", sps_len_);
+                nalu_mem       = new uint8_t[nalu_mem_size];
+
+                memcpy(nalu_mem + offset_pkt, start_code, 4);
+                offset_pkt += 4;
+                memcpy(nalu_mem + offset_pkt, sps_, sps_len_);
+                offset_pkt += sps_len_;
+
+                memcpy(nalu_mem + offset_pkt, start_code, 4);
+                offset_pkt += 4;
+                memcpy(nalu_mem + offset_pkt, pps_, pps_len_);
+                offset_pkt += pps_len_;
+
+                memcpy(nalu_mem + offset_pkt, start_code, 4);
+                offset_pkt += 4;
+                memcpy(nalu_mem + offset_pkt, p_read_ptr_, naluSize);
             }
-            nalus.insert(nalus.end(), StartCodeArray.begin(), StartCodeArray.end());
-            nalus.insert(nalus.end(), p_read_ptr_ + offset, p_read_ptr_ + offset + naluSize);
-            offset += naluSize;
+            else// if((p_read_ptr_[0] & 0x1f) == 0x01)
+            {
+                nalu_mem_size += naluSize + 4;
+                nalu_mem       = new uint8_t[nalu_mem_size];
+                memcpy(nalu_mem + offset_pkt, start_code, 4);
+                offset_pkt += 4;
+                memcpy(nalu_mem + offset_pkt, p_read_ptr_, naluSize);
+            }
+            p_read_ptr_ += naluSize;
+            (*p_tag_remaining_length) -= naluSize;
+            if(nalu_mem)
+            {
+                mem_map.emplace(std::make_pair(nalu_mem_size, nalu_mem));
+            }
         }
-        (*p_pkts)->data_length = nalus.size();
-        (*p_pkts)->data = new uint8_t[(*p_pkts)->data_length];
-        memcpy((*p_pkts)->data, &nalus[0], nalus.size());
+        if(mem_map.size() > 0)
+        {
+            for(auto itr = mem_map.begin(); itr != mem_map.end(); itr++)
+            {
+                (*p_pkts)->data_length += itr->first;
+            }
+            (*p_pkts)->data = new uint8_t[(*p_pkts)->data_length];
+            uint32_t offset_allmem = 0;
+            for(auto itr = mem_map.begin(); itr != mem_map.end(); itr++)
+            {
+                memcpy((*p_pkts)->data + offset_allmem, itr->second, itr->first);
+                offset_allmem += itr->first;
+            }
+        }
+        else
+        {
+            printf("Video tag has no nalu!\n");
+        }
+
+        for(auto itr = mem_map.begin(); itr != mem_map.end();)
+        {
+            delete itr->second;
+            itr = mem_map.erase(itr);
+        }
     }
     return 0;
 }

@@ -1,6 +1,6 @@
 #pragma once
 #include <memory>
-#include <vector>
+#include <map>
 
 enum class MediaStreamType
 {
@@ -106,7 +106,9 @@ private:
     MediaStreamInfo* p_streams_;
     uint32_t         streams_num_;
 
-    uint8_t*              asc_;
-    std::vector<uint8_t*> sps_vec_;
-    std::vector<uint8_t*> pps_vec_;
+    uint8_t*         asc_;
+    uint8_t*         sps_;
+    uint32_t         sps_len_;
+    uint8_t*         pps_;
+    uint32_t         pps_len_;
 };
