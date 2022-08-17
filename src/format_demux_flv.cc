@@ -23,10 +23,6 @@ FormatDemuxFlv::~FormatDemuxFlv()
     {
         delete p_flv_data_;
         p_flv_data_ = nullptr;
-    }
-    if(p_read_ptr_)
-    {
-        delete p_read_ptr_;
         p_read_ptr_ = nullptr;
     }
     if(p_streams_)
@@ -77,9 +73,9 @@ int FormatDemuxFlv::GetFlvData(char* p_url)
         p_flv_data_ = nullptr;
         p_read_ptr_ = nullptr;
     }
-    p_flv_data_ = new char[flv_file_length_];
+    p_flv_data_ = new unsigned char[flv_file_length_];
 
-    if(flv_file.read(p_flv_data_, flv_file_length_) < 0)
+    if(flv_file.read((char*)p_flv_data_, flv_file_length_) < 0)
     {
         printf("File url: %s, read failed!\n", p_url);
         return -1;
@@ -171,7 +167,7 @@ int FormatDemuxFlv::ParseFlvHead()
 
 int FormatDemuxFlv::GetStreamsInfo()
 {
-    char* p_parse_ptr = p_read_ptr_;
+    unsigned char* p_parse_ptr = p_read_ptr_;
     bool b_get_video_stream_info = false;
     bool b_get_audio_stream_info = false;
 
@@ -481,6 +477,10 @@ int FormatDemuxFlv::GetOnePacket(MediaStreamPacket** p_pkts)
         if(p_pkt)
         {
             b_get_pkt = true;
+        }
+        else
+        {
+            p_pkt = new MediaStreamPacket();
         }
     }
     

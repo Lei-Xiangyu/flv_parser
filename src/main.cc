@@ -51,11 +51,16 @@ int main(int argc, char* argv[])
         delete p_pkt;
         p_pkt = nullptr;
     }
-
-    delete [] p_stream;
-    p_stream = nullptr;
-    delete p_pkt;
-    p_pkt = nullptr;
+    if(p_stream)
+    {
+        delete [] p_stream;
+        p_stream = nullptr;
+    }
+    if(p_pkt)
+    { 
+        delete p_pkt;
+        p_pkt = nullptr;
+    }
 
     file_handle_v.close();
     file_handle_a.close();

@@ -96,8 +96,8 @@ private:
     int ParseAudioHeadAndData(MediaStreamPacket** p_pkts, uint32_t* p_tag_remaining_length);
     int ParsevideoHeadAndData(MediaStreamPacket** p_pkts, uint32_t* p_tag_remaining_length);
 private:
-    char*            p_flv_data_;
-    char*            p_read_ptr_;
+    unsigned char*   p_flv_data_;
+    unsigned char*   p_read_ptr_;
     uint64_t         flv_file_length_;
     bool             b_include_video_stream_;
     bool             b_include_audio_stream_;
