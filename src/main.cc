@@ -1,13 +1,9 @@
 #include "format_demux_flv.h"
 #include <fstream>
+#include "unistd.h"
 
-int main(int argc, char* argv[])
+int main_fun(int argc, char* argv[])
 {
-    for(int i = 0; i < argc; i++)
-    {
-        printf("argv %d: %s\n", i, argv[i]);
-    }
-
     std::ofstream file_handle_v;
     std::ofstream file_handle_a;
 
@@ -51,11 +47,6 @@ int main(int argc, char* argv[])
         delete p_pkt;
         p_pkt = nullptr;
     }
-    if(p_stream)
-    {
-        delete [] p_stream;
-        p_stream = nullptr;
-    }
     if(p_pkt)
     { 
         delete p_pkt;
@@ -65,5 +56,17 @@ int main(int argc, char* argv[])
     file_handle_v.close();
     file_handle_a.close();
 
+    return 0;
+}
+
+int main(int argc, char* argv[])
+{
+    for(int i = 0; i < argc; i++)
+    {
+        printf("argv %d: %s\n", i, argv[i]);
+    }
+
+    main_fun(argc, argv);
+    
     return 0;
 }

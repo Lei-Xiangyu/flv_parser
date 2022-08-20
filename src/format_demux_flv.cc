@@ -443,8 +443,6 @@ int FormatDemuxFlv::ParsevideoHeadAndData(MediaStreamPacket** p_pkts, uint32_t* 
             if((p_read_ptr_[0] & 0x1f) == 0x05)
             {
                 nalu_mem_size += naluSize + 4 * 3 + sps_len_ + pps_len_;
-
-                printf("%u\n", sps_len_);
                 nalu_mem       = new uint8_t[nalu_mem_size];
 
                 memcpy(nalu_mem + offset_pkt, start_code, 4);
